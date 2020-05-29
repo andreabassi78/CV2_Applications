@@ -120,12 +120,14 @@ if __name__ == '__main__':
             #print('elapsed time: ', time.time()-t0)      
             
             im_out = im_in
+            im_norm = np.clip(im_in.astype('float')*3, 20, 255).astype('uint8') #multiplication with 3 is to increase the contrast only
             
-            im_out, rois = create_contours(cx, cy, im_in, cnts, RECT_SIZE)
+            
+            im_out, rois = create_contours(cx, cy, im_norm, cnts, RECT_SIZE)
                 
             cv2.imshow('Acquired data', im_out )
             
-            #cv2.imwrite(path+'Annotated'+'\\'+filename+'\\out\\out'+ str(i)+'.tif', im_out)
+            cv2.imwrite(path+'Annotated'+'\\'+filename+'\\out_norm\\out'+ str(i)+'.tif', im_out)
             
             if len(rois) == 0:
                 roi_resized = np.zeros((ROI_SCALING*RECT_SIZE,ROI_SCALING*RECT_SIZE), dtype ='uint8') # for saving only
