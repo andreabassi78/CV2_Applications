@@ -88,49 +88,40 @@ if __name__=="__main__":
     
 
     #template matching
-    _next_img = cv2.imread('WT_1_3_t0100_z0000_c0.tif',0)
-    next_img = _next_img.copy()
+    next_img = cv2.imread('WT_1_3_t0100_z0000_c0.tif',0)
+    
     template = rois[0]
     h,w = template.shape
-    
+    print(h,w)
     
     methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED',
                 'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
     
-    meth = 'cv2.TM_CCORR_NORMED'
+    meth = 'cv2.TM_CCOEFF'
     t0 = time.time()
-    img1 = _next_img.copy()
+    #next_img = _next_img.copy()
     method = eval(meth)
-    res = cv2.matchTemplate(img1, template, method)
+    res = cv2.matchTemplate(next_img, template, method)
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
     # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
     if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
         top_left = min_loc
     else:
         top_left = max_loc
-    bottom_right = (top_left[0] + w, top_left[1] + h)
-    print('Found ROI center:', bottom_right[0] - half_size, bottom_right[1] - half_size)
-    print(f'Execution time using method {meth}: {time.time()-t0: .2f} s')
     
-    x = bottom_right[0] - half_size
-    y = bottom_right[1] - half_size
-    found_roi = next_img[y-half_size:y+half_size,
-                         x-half_size:x+half_size]
+    x_new = top_left[0] + half_size
+    y_new = top_left[1] + half_size
+    
+    print('Found ROI center:', x_new , y_new)
+    print(f'Execution time using method {meth}: {time.time()-t0: .2f} s')
+  
+    found_roi = next_img[y_new-half_size:y_new+half_size,
+                         x_new-half_size:x_new+half_size]
     
     cv2.imshow('Found ROI', found_roi)
     
     cv2.waitKey(0)
    
-    
-    # cv2.rectangle(img1,top_left, bottom_right, 255, 2)
-    # displaying the image
-    #cv2.imshow('Image after TM', img)
-        
-    # wait for a key to be pressed to exit
-    #cv2.waitKey(0)
-     
-    # close the window
-    #cv2.destroyAllWindows()
-        
+   
 
     

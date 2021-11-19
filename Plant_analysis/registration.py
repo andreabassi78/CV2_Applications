@@ -38,7 +38,7 @@ def click_event(event, x, y, flags, params):
 if __name__=="__main__":
  
     # reading the image
-    img = cv2.imread('C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1\\WT_1_3_t0000_z0000_c0.tif', 0)
+    img = cv2.imread('WT_1_3_t0000_z0000_c0.tif', 0)
  
     # displaying the image
     cv2.imshow('image', img)
@@ -93,7 +93,9 @@ cropList.append(crop)
 # Read the images to be aligned
 
 im1 =  cropList[0]
-im2 =  cv2.imread("C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1\\WT_1_3_t0399_z0000_c0.tif");
+im2 =  cv2.imread("WT_1_3_t0399_z0000_c0.tif");
+
+im2 =  im2[y:y+t, x:x+r]
 
 # Convert images to grayscale
 im1_gray = cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY)
