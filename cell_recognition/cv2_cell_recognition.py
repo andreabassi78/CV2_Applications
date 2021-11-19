@@ -90,7 +90,7 @@ if __name__ == '__main__':
     RECT_SIZE = 150 #must be even
     MIN_CELL_SIZE = 40*40#cell area must be at least MIN_CELL_SIZE (px^2) to be detected as a cell
     ROI_SCALING = 2
-    path = 'C:\\Users\\Andrea Bassi\\Documents\\Data\\PROCHIP\\Throughput_video\\'
+    path = 'C:\\Users\\Andrea Bassi\\OneDrive - Politecnico di Milano\\Data\\PROCHIP\\Throughput_video\\'
     #filename = 'dual_color_stack'
     filename = 'selected_stack'
     
@@ -127,7 +127,7 @@ if __name__ == '__main__':
                 
             cv2.imshow('Acquired data', im_out )
             
-            cv2.imwrite(path+'Annotated'+'\\'+filename+'\\out_norm\\out'+ str(i)+'.tif', im_out)
+            #cv2.imwrite(path+'Annotated'+'\\'+filename+'\\out_norm\\out'+ str(i)+'.tif', im_out)
             
             if len(rois) == 0:
                 roi_resized = np.zeros((ROI_SCALING*RECT_SIZE,ROI_SCALING*RECT_SIZE), dtype ='uint8') # for saving only

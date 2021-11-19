@@ -15,10 +15,6 @@ cap = cv.VideoCapture(cv.samples.findFile("plant.avi"))
 ret, frame1 = cap.read()
 
 #print(ret)
-
-
-
-
 prvs_image = cv.cvtColor(frame1,cv.COLOR_BGR2GRAY)
 
 #print ((prvs_image.shape))
@@ -45,7 +41,7 @@ while(1):
     
     #flow = cv.calcOpticalFlowFarneback(prvs_image,next_image, None, 0.5, 3, 15, 3, 5, 1.2, 0)
     
-    flow = cv.calcOpticalFlowFarneback(prvs_image,next_image, None, 0.5, 1, 45, 9, 5, 1.1, 1)
+    flow = cv.calcOpticalFlowFarneback(prvs_image,next_image, None, 0.5, 1, 15, 9, 5, 1.1, 1)
     
     mag, ang = cv.cartToPolar(flow[...,0], flow[...,1])
     
@@ -60,7 +56,9 @@ while(1):
     #cv.imshow('Flow',mip)
     #cv.waitKey(10)
     plt.imshow (mag)
+    plt.colorbar()
     plt.pause(0.01)
+    
     prev_mag = mag
     prvs_image = next_image
     print(i) 

@@ -87,7 +87,7 @@ def create_contours(cx,cy, img8bit, cnt, rect_size):
 RECT_SIZE = 150 #side of ROI that are extracted
 MIN_CELL_SIZE = 40*40 #cell area must be at least MIN_CELL_SIZE (px^2) to be detected as a cell
 ROI_SCALING = 2 #rescaling factor applied to the ROIs for displaying them larger
-path = 'C:\\Users\\Andrea Bassi\\Documents\\Data\\PROCHIP\\Throughput_video\\'
+path = 'C:\\Users\\Andrea Bassi\\OneDrive - Politecnico di Milano\\Data\\PROCHIP\\Throughput_video\\'
 #filename = 'dual_color_stack'
 filename = 'selected_stack'
 
