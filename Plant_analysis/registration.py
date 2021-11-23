@@ -1,133 +1,209 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 18 15:47:22 2021
+Created on Mon Nov 22 09:26:08 2021
 
-@author: luigi
+@author:
 """
-# importing the module
+
 import cv2
+import time
 import numpy as np
-  
-# function to display the coordinates of
-# of the points clicked on the image
-def click_event(event, x, y, flags, params):
- 
-    # checking for left mouse clicks
+import os
+
+global positions_list
+global half_size
+global img
+
+
+def select_point_on_click(event, x, y, flags, params):
+    """
+    gets the coordinates of the point and shows a rectangle around it
+    """
+    
     if event == cv2.EVENT_LBUTTONDOWN:
  
-        # displaying the coordinates
-        # on the Shell
-        print('x1 = ' + str(x), ' ','y1 = ' + str(y))
- 
-        # displaying the coordinates
-        # on the image window
-        #font = cv2.FONT_HERSHEY_SIMPLEX
-        #cv2.putText(img, str(x) + ',' +
-        #            str(y), (x,y), font,
-        #            1, (255, 0, 0), 2)
-        #cv2.imshow('image', img)
+        # print('x1 = ' + str(x), ' ','y1 = ' + str(y))
+        print(f'Selected point: x = {x} , y = {y}')
+        positions_list.append([x,y])
         
-        global posList
-        posList = []
-        if event == cv2.EVENT_LBUTTONDOWN:
-            posList.append(x)
-            posList.append(y)
+        
+        startpoint = (x-half_size, y+half_size)
+        endpoint =   (x+half_size, y-half_size)
+        
+        cv2.rectangle(img, startpoint, endpoint,
+                      color = 255,
+                      thickness = 3)
+        
+        cv2.imshow('image', img)
+        cv2.waitKey(0)
+    
+def select_rois(img, half_size = 100):
+    
+    rois = []
+    
+    for pos in positions_list:
+        x = pos[0]
+        y = pos[1]
+        rois.append(img[y-half_size:y+half_size,
+                        x-half_size:x+half_size]
+                    )
+    return rois
+
+def show_rois(rois):
+    
+    for roi_idx, roi in enumerate(rois):
+        cv2.imshow(f'Roi {roi_idx}',roi)
+    
+    # cv2.waitKey(0)
+       
+    
+def align_with_template_match(next_image, templates):
+    
+    aligned_rois = []
+    
+    for template in templates: 
+    
+        h,w = template.shape
+        
+        methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED',
+                    'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
+        
+        meth = 'cv2.TM_CCOEFF'
+        # t0 = time.time()
+        method = eval(meth)
+        res = cv2.matchTemplate(next_image, template, method)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+        if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+            top_left = min_loc
+        else:
+            top_left = max_loc
+        
+        x_new = top_left[0] + half_size
+        y_new = top_left[1] + half_size
+        
+        
+        aligned_roi = next_image[y_new-half_size:y_new+half_size,
+                             x_new-half_size:x_new+half_size]
+        
+        aligned_rois.append(aligned_roi)
+        print('Found ROI center:', x_new , y_new)
+        # print(f'Execution time using method {meth}: {time.time()-t0: .2f} s')
+      
+        
+    
+    return aligned_rois, templates
+    
+    
+def align_with_registration(next_rois, previous_rois, half_size):  
+    
+    original_rois = []
+    aligned_rois = []
+    
+    for previous_roi, next_roi in zip(previous_rois, next_rois):
+    
+        sx,sy = previous_roi.shape
+        
+        warp_mode = cv2.MOTION_TRANSLATION
+        warp_matrix = np.eye(2, 3, dtype=np.float32)
+        number_of_iterations = 5000
+        termination_eps = 1e-10
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, number_of_iterations,  termination_eps)
+         
+        # run the ECC algorithm
+        _, warp_matrix = cv2.findTransformECC (previous_roi, next_roi,
+                                                  warp_matrix, warp_mode, criteria)
+        
+        next_roi_aligned = cv2.warpAffine(next_roi, warp_matrix, (sx,sy),
+                                           flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
+            
+        
+        original_roi = previous_roi[sy//2-half_size:sy//2+half_size,
+                                        sx//2-half_size:sx//2+half_size ]
+        
+        
+        aligned_roi =  next_roi_aligned[sy//2-half_size:sy//2+half_size,
+                                        sx//2-half_size:sx//2+half_size ]
+    
+        original_rois.append(original_roi)
+        aligned_rois.append(aligned_roi)
+        
+        distance = np.sqrt( warp_matrix[0,2] **2 + warp_matrix[1,2] **2 )
+        print('Distance:', distance )
+    
+    
+    return aligned_rois, original_rois
 
 
-# driver function
+
 if __name__=="__main__":
+    
+    half_size = 100
+    mode = 1 # 0: 'template_matching', 1: 'registration'
  
-    # reading the image
-    img = cv2.imread('WT_1_3_t0000_z0000_c0.tif', 0)
+    folder = os.getcwd()
+
+    # file_names = os.listdir(folder)
+    
+    file_names = [ x for x in os.listdir(folder) if 'c0.tif' in x ]
+    
+    first_img = cv2.imread(file_names[0])
+    
+    # first_img = cv2.imread([ x for x in file_names if 't0000' in x][0])
+    
+    
+    
+    
+    
+    # %% open file and select points
+    
+    positions_list = []
+     
+    img = first_img.copy()
+    img_size = img.shape    
  
-    # displaying the image
+    # display the rescaled image 
+    cv2.namedWindow("image", cv2.WINDOW_NORMAL) 
+    rescale = 0.3
+    cv2.resizeWindow('image', (int(img_size[1]*rescale), int(img_size[0]*rescale)) )
     cv2.imshow('image', img)
- 
-    # setting mouse handler for the image
-    # and calling the click_event() function
-    cv2.setMouseCallback('image', click_event)
     
-    # wait for a key to be pressed to exit
+    # get the positions on the image
+    cv2.setMouseCallback('image', select_point_on_click)
     cv2.waitKey(0)
- 
-    # close the window
-    cv2.destroyAllWindows() 
+      
+
+
+    for t_index in range(len(file_names)-1):
+        
+        print(t_index)
+        # reading the image
+        previous_img = cv2.imread(file_names[t_index], 0)
+        next_img = cv2.imread(file_names[t_index+1], 0)
+            
+        # %% Template matching
+        if mode == 0:
+            # select the rois
+            rois = select_rois(previous_img, half_size)
+            # template matching
+            aligned, original = align_with_template_match(next_img,
+                                                      templates = rois)
+      
+        # %% Registration
+        if mode == 1:
+                
+            # select the rois
+            previous_rois = select_rois(previous_img, int(half_size*1.5))
+            next_rois = select_rois(next_img, int(half_size*1.5))
+            
+            # registration
+            aligned, original = align_with_registration(next_rois,
+                                                        previous_rois,
+                                                        half_size) 
+             
+    roi_to_show = 0
+    cv2.imshow('Aligned ROI', aligned[roi_to_show])
+    cv2.imshow('Original ROI', original[roi_to_show])
+    # cv2.imshow('Difference', (aligned-original)**2)
+    cv2.waitKey(0)
     
-    #adding coordinates to list
-    posNp = np.array(posList)
-    
-#Drawing a rectangle
-start_point = (posList[0] - 100, posList[1] + 100) 
-end_point = (posList[0] + 100, posList[1] - 100) 
-# Blue color in BGR 
-color = (255, 255, 255)   
-# Line thickness of 2 px 
-thickness = 2 
-# Using cv2.rectangle() method 
-# Draw a rectangle with white line borders of thickness of 2 px 
-img_1 = cv2.rectangle(img, start_point, end_point, color, thickness)
-# displaying the image
-cv2.imshow('image', img)
-    
-# wait for a key to be pressed to exit
-cv2.waitKey(0)
-
-# close the window
-cv2.destroyAllWindows() 
-
-#crop image
-y=posList[1] - 100
-x=posList[0] - 100
-t=200
-r=200
-crop = img[y:y+t, x:x+r]
-    
-cv2.imshow('Image', crop)
-cv2.waitKey(0)
-
-#adding the crop image to a list
-global cropList
-cropList = []
-cropList.append(crop)
-
-# Read the images to be aligned
-
-im1 =  cropList[0]
-im2 =  cv2.imread("WT_1_3_t0399_z0000_c0.tif");
-
-im2 =  im2[y:y+t, x:x+r]
-
-# Convert images to grayscale
-im1_gray = cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY)
-im2_gray = cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY)
-# Find size of image1
-sz = im1.shape
-
-# Define the motion model
-warp_mode = cv2.MOTION_TRANSLATION
-
-# Define 2x3 matrix and initialize the matrix to identity
-warp_matrix = np.eye(2, 3, dtype=np.float32)
-
-# Specify the number of iterations.
-number_of_iterations = 5000;
- 
-# Specify the threshold of the increment
-# in the correlation coefficient between two iterations
-termination_eps = 1e-10;
- 
-# Define termination criteria
-criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, number_of_iterations,  termination_eps)
- 
-# Run the ECC algorithm. The results are stored in warp_matrix.
-(cc, warp_matrix) = cv2.findTransformECC (im1_gray,im2_gray,warp_matrix, warp_mode, criteria)
- 
-# Use warpAffine for Translation, Euclidean and Affine
-im2_aligned = cv2.warpAffine(im2, warp_matrix, (sz[1],sz[0]), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP);
- 
-# Show final results
-
-cv2.imshow("Image 1", im1)
-cv2.imshow("Image 2", im2)
-cv2.imshow("Aligned Image 2", im2_aligned)
-cv2.waitKey(0)
