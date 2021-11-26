@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 22 09:26:08 2021
+Created on Fri Nov 26 11:35:46 2021
 
-@author:
+@author: luigi
 """
 
 import cv2
 import time
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 global positions_list
 global half_size
@@ -31,11 +32,12 @@ def select_point_on_click(event, x, y, flags, params):
         endpoint =   (x+half_size, y-half_size)
         
         cv2.rectangle(img, startpoint, endpoint,
-                      color = 255,
+                      color = (10, 255, 10),
                       thickness = 3)
         
         cv2.imshow('image', img)
         cv2.waitKey(0)
+        
     
 def select_rois(img, half_size = 100):
     
@@ -60,6 +62,10 @@ def show_rois(rois):
 def align_with_template_match(next_image, templates):
     
     aligned_rois = []
+    
+    for pos in positions_list:
+        x = pos[0]
+        y = pos[1]
     
     for template in templates: 
     
@@ -88,17 +94,22 @@ def align_with_template_match(next_image, templates):
         
         aligned_rois.append(aligned_roi)
         print('Found ROI center:', x_new , y_new)
-        # print(f'Execution time using method {meth}: {time.time()-t0: .2f} s')
-      
         
     
-    return aligned_rois, templates
+        displacement = np.sqrt( (x_new - x)**2 + (y_new - y)**2 )
+        # print(f'Execution time using method {meth}: {time.time()-t0: .2f} s')
+    
+    return aligned_rois, templates, displacement, x_new, y_new
     
     
 def align_with_registration(next_rois, previous_rois, half_size):  
     
     original_rois = []
     aligned_rois = []
+    
+    for pos in positions_list:
+        x = pos[0]
+        y = pos[1]
     
     for previous_roi, next_roi in zip(previous_rois, next_rois):
     
@@ -128,26 +139,50 @@ def align_with_registration(next_rois, previous_rois, half_size):
         original_rois.append(original_roi)
         aligned_rois.append(aligned_roi)
         
+        x_new = x + int(warp_matrix[0,2])
+        y_new = y + int(warp_matrix[1,2])
+        
         distance = np.sqrt( warp_matrix[0,2] **2 + warp_matrix[1,2] **2 )
         print('Distance:', distance )
     
     
-    return aligned_rois, original_rois
+    return aligned_rois, original_rois, distance, x_new, y_new
 
+
+def pixel_intensity_mean (aligned_rois, x_new, y_new, half_increment):
+    
+    areas_of_interest = []
+    intensity_means = []
+    
+    for roi in aligned_rois:
+                area_of_interest = roi [y_new - half_increment: y_new + half_increment,
+                        x_new - half_increment: x_new + half_increment]
+                areas_of_interest.append(area_of_interest)
+            
+                cv2.threshold(area_of_interest, 127, 255, cv2.THRESH_TOZERO)
+                intensity_mean = np.mean(area_of_interest)
+                intensity_means.append(intensity_mean)
+
+    return areas_of_interest, intensity_means
 
 
 if __name__=="__main__":
     
     half_size = 100
+    half_increment = 10
     mode = 1 # 0: 'template_matching', 1: 'registration'
+    t_indexes = []
+    distances = []
+    displacements = []
  
-    folder = os.getcwd()
+    #folder = os.getcwd()
+    folder = 'C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1'
 
     # file_names = os.listdir(folder)
     
     file_names = [ x for x in os.listdir(folder) if 'c0.tif' in x ]
     
-    first_img = cv2.imread(file_names[0])
+    first_img = cv2.imread(folder + '\\' + file_names[0])
     
     # first_img = cv2.imread([ x for x in file_names if 't0000' in x][0])
     
@@ -155,7 +190,7 @@ if __name__=="__main__":
     
     
     
-    # %% open file and select points
+    ## %% open file and select points
     
     positions_list = []
      
@@ -177,19 +212,23 @@ if __name__=="__main__":
     for t_index in range(len(file_names)-1):
         
         print(t_index)
+        t_indexes.append(t_index)
+
         # reading the image
-        previous_img = cv2.imread(file_names[t_index], 0)
-        next_img = cv2.imread(file_names[t_index+1], 0)
+        previous_img = cv2.imread(folder + '\\' + file_names[t_index], 0)
+        next_img = cv2.imread(folder + '\\' + file_names[t_index+1], 0)
             
-        # %% Template matching
+        # # %% Template matching
         if mode == 0:
             # select the rois
             rois = select_rois(previous_img, half_size)
             # template matching
-            aligned, original = align_with_template_match(next_img,
+            aligned, original, displacement, x_new, y_new = align_with_template_match(next_img,
                                                       templates = rois)
-      
-        # %% Registration
+            displacements.append(displacement)
+        
+    
+        ## %% Registration
         if mode == 1:
                 
             # select the rois
@@ -197,15 +236,40 @@ if __name__=="__main__":
             next_rois = select_rois(next_img, int(half_size*1.5))
             
             # registration
-            aligned, original = align_with_registration(next_rois,
+            aligned, original, distance, x_new, y_new = align_with_registration(next_rois,
                                                         previous_rois,
                                                         half_size) 
-             
+            distances.append(distance)
+            
+        areas_of_interest, intensity_means = pixel_intensity_mean (aligned, x_new, y_new, half_increment)
+            
         roi_to_show = 0
         cv2.imshow('Aligned ROI', aligned[roi_to_show])
-        # cv2.imshow('Original ROI', original[roi_to_show])
+        #cv2.imshow('Original ROI', original[roi_to_show])
         # cv2.imshow('Difference', (aligned-original)**2)
-        cv2.waitKey(100)
-   
-    cv2.destroyAllWindows()     
-    
+        cv2.waitKey(10)
+        
+        
+if mode == 0:
+        xs1 = t_indexes
+        ys1 = displacements
+        plt.plot(xs1, ys1), plt.xlabel("t_index"), plt.ylabel("Displacement")
+        plt.show()
+        
+        xs1 = t_indexes
+        ys2 = intensity_means
+        plt.plot(xs1, ys2), plt.xlabel("t_index"), plt.ylabel("Intensity mean")
+        plt.show()
+            
+else:     
+        xs1 = t_indexes
+        ys1 = distances
+        plt.plot(xs1, ys1), plt.xlabel("t_index"), plt.ylabel("Displacement")
+        plt.show()
+
+        xs1 = t_indexes
+        ys2 = intensity_means
+        plt.plot(xs1, ys2), plt.xlabel("t_index"), plt.ylabel("Intensity mean")
+        plt.show()
+
+cv2.destroyAllWindows()
