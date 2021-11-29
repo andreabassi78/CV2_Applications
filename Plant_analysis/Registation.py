@@ -79,7 +79,7 @@ def open_image(path, *args):
 
 def filter_image(img, sigma):
     if sigma >0:
-        sigma = (sigma//2)*2+1 # sigma must be odd
+        sigma = (sigma//2)*2+1 # sigma must be odd in cv2
         #filtered = cv2.GaussianBlur(img,(sigma,sigma),cv2.BORDER_DEFAULT)
         #_ret, img = cv2.threshold(img,0,255,cv2.THRESH_TOZERO+cv2.THRESH_OTSU)  
         #_ret, img = cv2.threshold(img,31,255,cv2.THRESH_TOZERO)  
@@ -88,6 +88,7 @@ def filter_image(img, sigma):
     else:
         return img
         
+    
 def select_rois(input_image, positions, roi_size):
     
     rois = []
@@ -100,7 +101,7 @@ def select_rois(input_image, positions, roi_size):
     return rois
 
 
-def show_rois(rois, title, rect_fraction, resize_roi=3):
+def show_rois(rois, title, rect_fraction, zoom=3):
     
     for roi_idx, roi in enumerate(rois):
         sx,_ = roi.shape
@@ -108,13 +109,14 @@ def show_rois(rois, title, rect_fraction, resize_roi=3):
         delta= int(s/rect_fraction)
         startpoint = (s-delta, s+delta)
         endpoint =   (s+delta, s-delta)
+        #_ret, roi = cv2.threshold(roi,33,255,cv2.THRESH_TOZERO) # TODO test different cases
         cv2.rectangle(roi, startpoint, endpoint,
                   color = 255,
                   thickness = 1)
-        roi = cv2.resize(roi, [resize_roi*sx,resize_roi*sx])
+        roi = cv2.resize(roi, [zoom*sx,zoom*sx])
         roi = cv2.applyColorMap(roi, cv2.COLORMAP_PINK   )
-        cv2.imshow(f'{title}ROI{roi_idx}', roi )
-        cv2.waitKey(5)
+        cv2.imshow(f'{title} ROI{roi_idx}', roi )
+        cv2.waitKey(3)
          
     
 def align_with_registration(next_rois, previous_rois, filter_size, roi_size):  
@@ -168,16 +170,21 @@ def align_with_registration(next_rois, previous_rois, filter_size, roi_size):
     return aligned_rois, original_rois, dx_list, dy_list
 
 
-def update_positions(old_positions, dx_list, dy_list ):
+def update_position(old_positions, initial_lengths, dx_list, dy_list ):
     
     new_positions = []
-    for pos, dx, dy in zip(old_positions, dx_list, dy_list):
+    new_lengths = []
+    roi_idx = 0
+    for pos, dx, dy, init_length in zip(old_positions, dx_list, dy_list, initial_lengths):
         x = pos[0] + dx
         y = pos[1] + dy
+        disp = np.sqrt(dx**2+dy**2)
         new_positions.append([x,y])
-        print('Displacement:', np.sqrt(dx**2+dy**2))    
+        new_lengths.append(np.sqrt(x**2+y**2)-init_length)
+        print(f'Displacement for ROI{roi_idx}:', disp)    
+        roi_idx +=1
         
-    return new_positions
+    return new_positions, new_lengths
 
 
 def calculate_mean_intensity(imgs, fraction=2):
@@ -190,11 +197,11 @@ def calculate_mean_intensity(imgs, fraction=2):
     sx,sy = imgs[0].shape 
     
     for img in imgs:
-        # _ret, thresh_pre = cv2.threshold(img,0,255,cv2.THRESH_TOZERO+cv2.THRESH_OTSU)
+        # _ret, img = cv2.threshold(img,0,255,cv2.THRESH_TOZERO+cv2.THRESH_OTSU)
         # mean_intensity = np.mean(thresh_pre[thresh_pre>0])
         #cv2.imshow('segmented', thresh_pre)
         #cv2.waitKey(10)       
-        subroi_halfsize = int(sx/2/fraction)     
+        subroi_halfsize = int(sx/2/fraction)    # TODO use circular subroi
         mean_intensity = np.mean(img[sx//2-subroi_halfsize:sx//2+subroi_halfsize,
                                      sy//2-subroi_halfsize:sy//2+subroi_halfsize])
         mean_intensities.append(mean_intensity)
@@ -207,10 +214,9 @@ if __name__== "__main__":
     ROI_SIZE = 100
     FILTER_SIZE = 3 # size of the blur applied to the images 
 
-    # folder = os.getcwd()
     folder = 'D:\\DATA\\SPIM\\211014\\aca2-2_2'
-    # folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
-    # file_names = os.listdir(folder)
+    # folder = os.curdir
+    #folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
 
     try:     
          
@@ -219,12 +225,14 @@ if __name__== "__main__":
         selection_img, vmin, vmax = open_image(folder + '\\' + file_names[0])
         initial_positions_list = select_points(selection_img, ROI_SIZE) # list of the selected points
         positions_list = initial_positions_list
+        initial_length = [np.sqrt(x**2+y**2) for [x,y] in positions_list] #TODO use the real length
         
         time_frames = len(file_names)-1
         
         displacements_x = []
         displacements_y = []
         intensities = []
+        lengths = []
         
         initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)
         
@@ -232,7 +240,7 @@ if __name__== "__main__":
             
             # print('processing image:', t_index )
             
-            # previous_img = open_image(folder + '\\' + file_names[t_index], CONTRAST, vmin, vmax)
+            #previous_img = open_image(folder + '\\' + file_names[t_index], vmin, vmax)
             next_img,_,_ = open_image(folder + '\\' + file_names[t_index+1], vmin, vmax)
             
             previous_rois = select_rois(initial_img, initial_positions_list, ROI_SIZE)
@@ -244,35 +252,37 @@ if __name__== "__main__":
                                                                 FILTER_SIZE,
                                                                 ROI_SIZE)
         
-            positions_list = update_positions(positions_list, dx, dy)
-            
+            positions_list, length = update_position(positions_list, initial_length, dx, dy)
             rect_fraction = 3
             intensity = calculate_mean_intensity(aligned, rect_fraction)    
             
             displacements_x.append(dx)
             displacements_y.append(dy)
+            lengths.append(length)
             intensities.append(intensity)
             
-            show_rois(aligned, 'Aligned', rect_fraction, resize_roi=3)
+            show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
+ 
         
-        #calculate fft power spectrum
+        lengths_array =np.array(lengths) 
         intensities_array = np.array(intensities) 
-        ft = np.fft.fftshift(np.fft.fft(intensities_array, axis=0))
-        intensities_ft = (np.abs(ft))**2   
+        #calculate power spectrum
+        ft = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(intensities_array), axis=0))
+        spectra_array = (np.abs(ft))**2   
     
-        plt.plot(displacements_x)
+        plt.plot(lengths_array)
         plt.xlabel("time index") 
         plt.ylabel("displacement (px)")
         plt.show()
         
-        plt.plot(intensities)
+        plt.plot(intensities_array)
         plt.xlabel("time index")
         plt.ylabel("mean intensity")
         plt.show()
         
-        plt.plot(np.log10(intensities_ft) + 1e-8)
+        plt.plot(np.log10(spectra_array) + 1e-8)
         plt.xlabel("frequency index")
-        plt.ylabel("power spectrum")
+        plt.ylabel("power spectrum (Log)")
         plt.show()              
                 
     finally:    
