@@ -231,7 +231,7 @@ if __name__== "__main__":
     
     ROI_SIZE = 100
     FILTER_SIZE = 3 # size of the blur applied to the images 
-
+    rect_fraction = 3
     folder = 'D:\\DATA\\SPIM\\211014\\aca2-2_2'
     # folder = os.curdir
     #folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
@@ -245,12 +245,17 @@ if __name__== "__main__":
         positions_list = initial_positions_list
         initial_length = [np.sqrt(x**2+y**2) for [x,y] in positions_list] #TODO use the real length
         
+        initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)        
+        initial_roi = select_rois(initial_img, initial_positions_list, ROI_SIZE)
+        
+        initial_intensity = calculate_mean_intensity(initial_roi, rect_fraction)  
         time_frames = len(file_names)-1
         
-        displacements_x = []
-        displacements_y = []
-        intensities = []
-        lengths = []
+        displacements_x = [[0.0]*len(initial_positions_list)] # ! create a list of zeros with a number of elements equals to the ROIs number 
+        displacements_y = [[0.0]*len(initial_positions_list)]
+        intensities = [initial_intensity]
+        lengths = [initial_length]
+        pos_lists = [positions_list]
         
         initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)
         
@@ -271,18 +276,23 @@ if __name__== "__main__":
                                                                 ROI_SIZE)
         
             positions_list, length = update_position(positions_list, initial_length, dx, dy)
-            rect_fraction = 3
+            
             intensity = calculate_mean_intensity(aligned, rect_fraction)    
             
             displacements_x.append(dx)
             displacements_y.append(dy)
             lengths.append(length)
             intensities.append(intensity)
+            pos_lists.append(positions_list)
             
             show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
  
+    
+        displacements_x_array = np.array(displacements_x)
+        displacements_y_array = np.array(displacements_y)
         
-        lengths_array =np.array(lengths) 
+        
+        lengths_array = np.array(lengths) 
         intensities_array = np.array(intensities) 
         
         #calculate power spectrum
