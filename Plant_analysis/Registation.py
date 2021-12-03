@@ -72,7 +72,7 @@ def open_image(path, *args):
         vmax = args[1]
     contrast = 1   
     img = contrast * (img-vmin) / (vmax-vmin)
-    img = (img*256).astype('uint8')
+    img = (img*255).astype('uint8')
       
     return img, vmin, vmax
 
@@ -209,6 +209,24 @@ def calculate_mean_intensity(imgs, fraction=2):
     return mean_intensities
 
 
+def plot_data(data, xlabel, ylabel, plot_type='lin'):
+    char_size = 10
+    linewidth = 0.85
+    fig = plt.figure(figsize=(4,3), dpi=300)
+    ax = fig.add_subplot(111)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # ax.set_title(title, size=char_size)   
+    ax.set_xlabel(xlabel, size=char_size)
+    ax.set_ylabel(ylabel, size=char_size)
+    ax.plot(data, linewidth=linewidth)
+    ax.xaxis.set_tick_params(labelsize=char_size*0.75)
+    ax.yaxis.set_tick_params(labelsize=char_size*0.75)
+    if plot_type == 'log':
+        ax.set_yscale('log')
+    ax.grid(True, which='major',axis='both',alpha=0.2)
+
+
 if __name__== "__main__":
     
     ROI_SIZE = 100
@@ -266,25 +284,26 @@ if __name__== "__main__":
         
         lengths_array =np.array(lengths) 
         intensities_array = np.array(intensities) 
+        
         #calculate power spectrum
         ft = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(intensities_array), axis=0))
         spectra_array = (np.abs(ft))**2   
-    
-        plt.plot(lengths_array)
-        plt.xlabel("time index") 
-        plt.ylabel("displacement (px)")
-        plt.show()
         
-        plt.plot(intensities_array)
-        plt.xlabel("time index")
-        plt.ylabel("mean intensity")
-        plt.show()
         
-        plt.plot(np.log10(spectra_array) + 1e-8)
-        plt.xlabel("frequency index")
-        plt.ylabel("power spectrum (Log)")
-        plt.show()              
-                
+        # show data with plt
+        char_size = 10
+        plt.rc('font', family='calibri', size=char_size)
+        plot_data(lengths_array,
+                "time index",
+                "displacement (px)")
+        plot_data(intensities_array,
+                "time index",
+                "mean intensity")
+        plot_data(spectra_array, 
+                "frequency index",
+                "power spectrum", plot_type = 'log')
+        plt.rcParams.update(plt.rcParamsDefault)
+
     finally:    
             
         cv2.destroyAllWindows()
