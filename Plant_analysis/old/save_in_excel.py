@@ -234,30 +234,50 @@ def plot_data(data, xlabel, ylabel, plot_type='lin'):
         ax.set_yscale('log')
     ax.grid(True, which='major',axis='both',alpha=0.2)
     
-def save_in_excel (folder, rois, sheet_name, transposed_pos_lists,
-                   displacements_x_array, displacements_y_array, intensities_array):
-    """
-    - creates a dataframe with x, y, dx, dy and mean intensity data
-    - creates an excel file with the same name of the folder were the images to analyze are stored 
-      and exports the created dataframe in it     
-    """    
-    writer = pd.ExcelWriter(os.path.join(folder + '.' + 'xlsx'))
     
-    for roi_idx, roi in enumerate(rois):        
-            df_pos = pd.DataFrame(transposed_pos_lists[roi_idx], columns = ['x', 'y'])
-            df_dx = pd.DataFrame(displacements_x_array [:,roi_idx], columns = ['dx'])
-            df_dy = pd.DataFrame(displacements_y_array [:,roi_idx], columns = ['dy'])
-            df_mean_intensities = pd.DataFrame(intensities_array [:,roi_idx],
-                                               columns = ['mean_intensity'])            
+def save_in_excel (filename_xls, sheets_number, **kwargs):
+    """
+    Creates or overwrite an an excel file with a number of sheets.
+    The data to save (in columns) are passed as kwargs as 2D lists
+    """    
+    writer = pd.ExcelWriter(filename_xls +'.xlsx')
+        
+    for sheet_idx in range(sheets_number):  
+ 
+        data = []
+        headers = []    
+        
+        for key, val in kwargs.items():
+            val_array = np.array(val)
+            data.append(val_array[:,sheet_idx])
+            headers.append(key)
             
-            data = [df_pos ['x'], df_pos ['y'], df_dx ['dx'], df_dy ['dy'],
-                    df_mean_intensities ['mean_intensity']]
-            headers = ['x', 'y', 'dx', 'dy', 'mean_intensities']
-            df = pd.concat(data, axis=1, keys=headers)
-            df.index.name = 't_index'
-            
-            df.to_excel(writer, f'{sheet_name} ROI{roi_idx}')
+        df = pd.DataFrame(data, index = headers).transpose()
+        df.index.name = 't_index'
+        
+        print(df)
+        
+        df.to_excel(writer, f'ROI_{sheet_idx}')
     writer.save()
+    
+    # for idx in range(sheets_number):  
+ 
+    #     data = []
+    #     headers = []    
+        
+    #     for key, val in kwargs.items():
+                  
+    #         dataframe = pd.DataFrame(val[:,idx], columns=[key])
+            
+    #         data.append(dataframe[key])
+    #         headers.append(key)
+            
+    #     df = pd.concat(data, axis=1, keys=headers)
+    #     df.index.name = 't_index'
+        
+    #     print(df)
+    #     df.to_excel(writer, f'ROI_{idx}')
+    # writer.save()
 
 
 if __name__== "__main__":
@@ -265,10 +285,11 @@ if __name__== "__main__":
     ROI_SIZE = 100
     FILTER_SIZE = 3 # size of the blur applied to the images 
     rect_fraction = 3
-    folder = 'C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1'
+    #folder = 'C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1'
     # folder = os.curdir
     #folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
-
+    folder = 'C:\\Users\\andrea\\OneDrive - Politecnico di Milano\\Documenti\\PythonProjects\\CV2Apps\\Plant_analysis\\data'
+    
     try:     
          
         file_names = [ x for x in os.listdir(folder) if 'c0.tif' in x ]
@@ -283,12 +304,14 @@ if __name__== "__main__":
         
         initial_intensity = calculate_mean_intensity(initial_roi, rect_fraction)  
         time_frames = len(file_names)-1
-        
-        displacements_x = [[0.0]*len(initial_positions_list)] # ! create a list of zeros with a number of elements equals to the ROIs number 
-        displacements_y = [[0.0]*len(initial_positions_list)]
         intensities = [initial_intensity]
         lengths = [initial_length]
-        pos_lists = [positions_list]
+        
+        positions_x = [[val[0] for val in positions_list]]
+        positions_y = [[val[1] for val in positions_list]]
+        displacements_x = [[0.0]*len(initial_positions_list)] # ! create a list of zeros with a number of elements equals to the ROIs number 
+        displacements_y = [[0.0]*len(initial_positions_list)]
+        
         
         initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)
         
@@ -316,28 +339,28 @@ if __name__== "__main__":
             displacements_y.append(dy)
             lengths.append(length)
             intensities.append(intensity)
-            pos_lists.append(positions_list)
+            positions_x.append([val[0] for val in positions_list])
+            positions_y.append([val[1] for val in positions_list])
             
-            show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
- 
-        displacements_x_array = np.array(displacements_x)
-        displacements_y_array = np.array(displacements_y)      
-        lengths_array = np.array(lengths) 
-        intensities_array = np.array(intensities) 
+            # show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
         
-        transposed_pos_lists = [list(i) for i in zip(*pos_lists)]
-        save_in_excel (folder, aligned, '', transposed_pos_lists,
-                       displacements_x_array, displacements_y_array, intensities_array)
+        save_in_excel (filename_xls = folder, 
+                        sheets_number = len(positions_list),
+                        x = positions_x,
+                        y = positions_y,
+                        dx = displacements_x,
+                        dy = displacements_y,
+                        intensity = intensities)
         
         #calculate power spectrum
+        intensities_array = np.array(intensities) 
         ft = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(intensities_array), axis=0))
         spectra_array = (np.abs(ft))**2   
-        
         
         # show data with plt
         char_size = 10
         plt.rc('font', family='calibri', size=char_size)
-        plot_data(lengths_array,
+        plot_data(lengths,
                 "time index",
                 "displacement (px)")
         plot_data(intensities_array,
