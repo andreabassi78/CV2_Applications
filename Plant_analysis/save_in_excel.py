@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Mon Dec  6 09:48:59 2021
+
+@author: luigi
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Fri Nov 26 11:35:46 2021
 
 @author: Andrea Bassi, Giorgia Tortora @Polimi
@@ -54,14 +61,7 @@ def select_points(input_img, size, rescale = 0.3):
     cv2.waitKey(0)
     
     return positions_list
-
-
-def open_nd2_image(path, *frameidx):
-    img = np.zeros(512) # TODO: write function
-    metadata = {}  
-    return img, meatadata
-
-
+ 
 
 def open_image(path, *args):
     '''
@@ -117,6 +117,7 @@ def show_rois(rois, title, rect_fraction, zoom=3):
         delta= int(s/rect_fraction)
         startpoint = (s-delta, s+delta)
         endpoint =   (s+delta, s-delta)
+        #_ret, roi = cv2.threshold(roi,33,255,cv2.THRESH_TOZERO) # TODO test different cases
         cv2.rectangle(roi, startpoint, endpoint,
                   color = 255,
                   thickness = 1)
@@ -177,20 +178,18 @@ def align_with_registration(next_rois, previous_rois, filter_size, roi_size):
     return aligned_rois, original_rois, dx_list, dy_list
 
 
-def update_position(old_pos, initial_pos, dx_list, dy_list ):
+def update_position(old_positions, initial_lengths, dx_list, dy_list ):
     
     new_positions = []
     new_lengths = []
     roi_idx = 0
-    for pos, pos0, dx, dy in zip(old_pos, initial_pos, dx_list, dy_list, ):
-        x1 = pos[0] + dx
-        y1 = pos[1] + dy
-        x0 = pos0[0]
-        y0 = pos0[1]
-        dr = np.sqrt(dx**2+dy**2)
-        new_positions.append([x1,y1])
-        new_lengths.append(np.sqrt((x1-x0)**2+(y1-y0)**2))
-        print(f'Displacement for ROI{roi_idx}: {dr:.3f}')    
+    for pos, dx, dy, init_length in zip(old_positions, dx_list, dy_list, initial_lengths):
+        x = pos[0] + dx
+        y = pos[1] + dy
+        disp = np.sqrt(dx**2+dy**2)
+        new_positions.append([x,y])
+        new_lengths.append(np.sqrt(x**2+y**2)-init_length)
+        print(f'Displacement for ROI{roi_idx}:', disp)    
         roi_idx +=1
         
     return new_positions, new_lengths
@@ -210,7 +209,7 @@ def calculate_mean_intensity(imgs, fraction=2):
         # mean_intensity = np.mean(thresh_pre[thresh_pre>0])
         #cv2.imshow('segmented', thresh_pre)
         #cv2.waitKey(10)       
-        subroi_halfsize = int(sx/2/fraction)    # TODO use circular subroi. Update show_rois too
+        subroi_halfsize = int(sx/2/fraction)    # TODO use circular subroi
         mean_intensity = np.mean(img[sx//2-subroi_halfsize:sx//2+subroi_halfsize,
                                      sy//2-subroi_halfsize:sy//2+subroi_halfsize])
         mean_intensities.append(mean_intensity)
@@ -218,45 +217,7 @@ def calculate_mean_intensity(imgs, fraction=2):
     return mean_intensities
 
 
-def correct_decay(data):
-    '''
-    corrects decay fitting data with a polynomial and subtracting it
-    data are organized as a list (time) of list (roi)
-    returns a 2D numpy array
-    '''
-    data = np.array(data) # shape is raws:time, cols:roi
-    rows, cols = data.shape 
-    order = 2
-    corrected = np.zeros_like(data)
-    for col_idx, column in enumerate(data.transpose()):
-        t_data = range(rows)
-        coeff = np.polyfit(t_data, column, order) 
-        fit_function = np.poly1d(coeff)
-        corrected_value = column - fit_function(t_data) 
-        corrected[:,col_idx]= corrected_value
-    
-    return corrected
-
-
-def calculate_spectrum(data):
-    '''
-    calculates power spectrum with fft
-    data are organized as a list (time) of list (roi), or as a 2D numpy array
-    returns a 2D numpy array
-    '''
-    
-    data = np.array(data) # shape is raws:time, cols:roi
-    ft = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(data), axis=0))
-    spectra = (np.abs(ft))**2 
-    
-    return spectra
-    
-
 def plot_data(data, xlabel, ylabel, plot_type='lin'):
-    '''
-    data are organized as a list (time) of list (roi), or as a 2D numpy array
-    '''
-    data = np.array(data)
     char_size = 10
     linewidth = 0.85
     fig = plt.figure(figsize=(4,3), dpi=300)
@@ -266,13 +227,11 @@ def plot_data(data, xlabel, ylabel, plot_type='lin'):
     # ax.set_title(title, size=char_size)   
     ax.set_xlabel(xlabel, size=char_size)
     ax.set_ylabel(ylabel, size=char_size)
-    if plot_type == 'log':
-        # data=data+np.mean(data) # in case of log plot, the mean is added to avoid zeros
-        ax.set_yscale('log')
     ax.plot(data, linewidth=linewidth)
     ax.xaxis.set_tick_params(labelsize=char_size*0.75)
     ax.yaxis.set_tick_params(labelsize=char_size*0.75)
-    
+    if plot_type == 'log':
+        ax.set_yscale('log')
     ax.grid(True, which='major',axis='both',alpha=0.2)
     
     
@@ -294,58 +253,77 @@ def save_in_excel (filename_xls, sheets_number, **kwargs):
             headers.append(key)
             
         df = pd.DataFrame(data, index = headers).transpose()
-    
         df.index.name = 't_index'
+        
+        print(df)
+        
         df.to_excel(writer, f'ROI_{sheet_idx}')
     writer.save()
     
+    # for idx in range(sheets_number):  
+ 
+    #     data = []
+    #     headers = []    
+        
+    #     for key, val in kwargs.items():
+                  
+    #         dataframe = pd.DataFrame(val[:,idx], columns=[key])
+            
+    #         data.append(dataframe[key])
+    #         headers.append(key)
+            
+    #     df = pd.concat(data, axis=1, keys=headers)
+    #     df.index.name = 't_index'
+        
+    #     print(df)
+    #     df.to_excel(writer, f'ROI_{idx}')
+    # writer.save()
+
 
 if __name__== "__main__":
     
     ROI_SIZE = 100
     FILTER_SIZE = 3 # size of the blur applied to the images 
     rect_fraction = 3
-    folder = 'D:\\DATA\\SPIM\\211014\\aca2-2_2'
+    #folder = 'C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1'
     # folder = os.curdir
-    # folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
-    # folder = 'C:\\Users\\luigi\\Desktop\\Giorgia\\WT_1'
-    # folder = 'C:\\Users\\andrea\\OneDrive - Politecnico di Milano\\Documenti\\PythonProjects\\CV2Apps\\Plant_analysis\\data'
+    #folder = 'D:\\DATA\\SPIM\\211014\\WT_1'
+    folder = 'C:\\Users\\andrea\\OneDrive - Politecnico di Milano\\Documenti\\PythonProjects\\CV2Apps\\Plant_analysis\\data'
     
-    SAVEDATA = True
-
     try:     
          
         file_names = [ x for x in os.listdir(folder) if 'c0.tif' in x ]
         
         selection_img, vmin, vmax = open_image(folder + '\\' + file_names[0])
-        initial_position_list = select_points(selection_img, ROI_SIZE) # list of the selected points
-        position_list = initial_position_list
+        initial_positions_list = select_points(selection_img, ROI_SIZE) # list of the selected points
+        positions_list = initial_positions_list
+        initial_length = [np.sqrt(x**2+y**2) for [x,y] in positions_list] #TODO use the real length
+        
         initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)        
-        initial_roi = select_rois(initial_img, initial_position_list, ROI_SIZE)
+        initial_roi = select_rois(initial_img, initial_positions_list, ROI_SIZE)
+        
         initial_intensity = calculate_mean_intensity(initial_roi, rect_fraction)  
-        
-        
-        # initialize time depended lists 
-        roi_num = len(initial_position_list)
-        time_frames_num = len(file_names)-1
+        time_frames = len(file_names)-1
         intensities = [initial_intensity]
-        lengths = [[0.0]*roi_num]
-        positions_x = [[val[0] for val in position_list]]
-        positions_y = [[val[1] for val in position_list]]
-        displacements_x = [[0.0]*roi_num] # ! create a list of zeros with a number of elements equals to the ROIs number 
-        displacements_y = [[0.0]*roi_num]
+        lengths = [initial_length]
+        
+        positions_x = [[val[0] for val in positions_list]]
+        positions_y = [[val[1] for val in positions_list]]
+        displacements_x = [[0.0]*len(initial_positions_list)] # ! create a list of zeros with a number of elements equals to the ROIs number 
+        displacements_y = [[0.0]*len(initial_positions_list)]
+        
         
         initial_img,_,_ = open_image(folder + '\\' + file_names[0], vmin, vmax)
         
-        for t_index in range(0, time_frames_num, 1):
+        for t_index in range(0, time_frames, 1): # TODO leave time_frame only
             
             # print('processing image:', t_index )
             
             #previous_img = open_image(folder + '\\' + file_names[t_index], vmin, vmax)
             next_img,_,_ = open_image(folder + '\\' + file_names[t_index+1], vmin, vmax)
             
-            previous_rois = select_rois(initial_img, initial_position_list, ROI_SIZE)
-            next_rois = select_rois(next_img, position_list, ROI_SIZE)
+            previous_rois = select_rois(initial_img, initial_positions_list, ROI_SIZE)
+            next_rois = select_rois(next_img, positions_list, ROI_SIZE)
             
             # registration
             aligned, original, dx, dy = align_with_registration(next_rois,
@@ -353,49 +331,44 @@ if __name__== "__main__":
                                                                 FILTER_SIZE,
                                                                 ROI_SIZE)
         
-            position_list, length = update_position(position_list, initial_position_list, dx, dy)
+            positions_list, length = update_position(positions_list, initial_length, dx, dy)
+            
+            intensity = calculate_mean_intensity(aligned, rect_fraction)    
             
             displacements_x.append(dx)
             displacements_y.append(dy)
             lengths.append(length)
-            positions_x.append([val[0] for val in position_list])
-            positions_y.append([val[1] for val in position_list])
-            
-            intensity = calculate_mean_intensity(aligned, rect_fraction)
             intensities.append(intensity)
+            positions_x.append([val[0] for val in positions_list])
+            positions_y.append([val[1] for val in positions_list])
             
-            show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
- 
-        # calculate power spectrum
-        # intensities = correct_decay(intensities)
-        spectra = calculate_spectrum(intensities)
+            # show_rois(aligned, 'Aligned', rect_fraction, zoom=4)
         
-        #save data in excel
-        if SAVEDATA:
-            save_in_excel (filename_xls = folder, 
-                            sheets_number = len(position_list),
-                            x = positions_x,
-                            y = positions_y,
-                            dx = displacements_x,
-                            dy = displacements_y,
-                            length = lengths,
-                            intensity = intensities,
-                            spectrum = spectra
-                            )
+        save_in_excel (filename_xls = folder, 
+                        sheets_number = len(positions_list),
+                        x = positions_x,
+                        y = positions_y,
+                        dx = displacements_x,
+                        dy = displacements_y,
+                        intensity = intensities)
+        
+        #calculate power spectrum
+        intensities_array = np.array(intensities) 
+        ft = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(intensities_array), axis=0))
+        spectra_array = (np.abs(ft))**2   
         
         # show data with plt
         char_size = 10
         plt.rc('font', family='calibri', size=char_size)
         plot_data(lengths,
                 "time index",
-                "lenght px)")
-        plot_data(intensities,
+                "displacement (px)")
+        plot_data(intensities_array,
                 "time index",
                 "mean intensity")
-        plot_data(spectra, 
+        plot_data(spectra_array, 
                 "frequency index",
                 "power spectrum", plot_type = 'log')
-        
         plt.rcParams.update(plt.rcParamsDefault)
 
     finally:    
